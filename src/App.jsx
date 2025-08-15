@@ -1,4 +1,3 @@
-
 import React, { useEffect, useMemo, useRef, useState } from "react";
 
 const MLB_API = "https://statsapi.mlb.com/api/v1";
@@ -39,6 +38,12 @@ const TEAM_URLS = {
   146: "https://www.mlb.com/marlins",
   147: "https://www.mlb.com/yankees",
   158: "https://www.mlb.com/brewers",
+};
+
+// Helper to get ballpark URL for a home team
+const getBallparkUrlForHomeTeam = (homeTeamId) => {
+  const base = TEAM_URLS[homeTeamId];
+  return base ? `${base}/ballpark` : null;
 };
 
 // ----- utils -----
@@ -462,11 +467,26 @@ function ScoresPanel({ date, setDate, tz }) {
                       <span className="pill pill-mini">DH G{g.seriesGameNumber}</span>
                     )}
                   </div>
-                  <div>
+                  <div style={{ fontSize: "0.85em" }}>
                     <span className="label">Time:</span> {prettyTime(g.gameDate, tz)}
                   </div>
-                  <div>
-                    <span className="label">Location:</span> {g.venue || "—"}
+                  <div style={{ fontSize: "0.85em" }}>
+                    <span className="label">Location:</span>{" "}
+                    {g.venue ? (() => {
+                      const stadiumUrl = getBallparkUrlForHomeTeam(g.home?.id);
+                      return stadiumUrl ? (
+                        <a
+                          href={stadiumUrl}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          style={{ textDecoration: "underline" }}
+                        >
+                          {g.venue}
+                        </a>
+                      ) : (
+                        g.venue
+                      );
+                    })() : "—"}
                   </div>
                 </div>
               </div>
