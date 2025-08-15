@@ -1,0 +1,27 @@
+body { font-family: system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial, sans-serif; margin: 0; padding: 0; background: #f8fafc; color:#0f172a; }
+.container { max-width: 1100px; margin: 0 auto; padding: 24px 16px; }
+.card { border: 1px solid #e2e8f0; background: #fff; border-radius: 16px; overflow: hidden; }
+.controls { display:grid; grid-template-columns:120px 1fr 120px; gap:8px; align-items:center; }
+.controls .row { display:flex; gap:8px; }
+.btn { border:1px solid #e2e8f0; background:#fff; padding:8px 12px; border-radius:12px; cursor:pointer; }
+.input { border:1px solid #e2e8f0; background:#fff; padding:8px 12px; border-radius:12px; flex:1; }
+.pill { display:inline-flex; align-items:center; padding:2px 8px; font-size:11px; font-weight:700; border-radius:999px; border:1px solid #e2e8f0; background:#e2e8f0; color:#0f172a; }
+.pill-mini { font-size:10px; padding:1px 6px; border-radius:999px; }
+.role { display:inline-flex; align-items:center; gap:6px; padding:2px 8px; border-radius:999px; font-size:10px; font-weight:700; }
+.role-home { background:#eef2ff; border:1px solid #c7d2fe; }
+.role-away { background:#ecfeff; border:1px solid #a5f3fc; }
+.team-name { font-weight:600; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; max-width:260px; }
+.team-sub { font-size:12px; color:#64748b; }
+.team-sub-row { display:flex; align-items:center; gap:8px; }
+.teamline { display:grid; grid-template-columns: 1fr auto; align-items:center; gap:10px; }
+.teamline-left { display:flex; align-items:center; gap:8px; min-width:0; }
+.teamline-meta { line-height:1.2; min-width:0; }
+.scorepill { min-width: 44px; text-align:center; font-weight:800; font-size:16px; padding:6px 10px; border:1px solid #e2e8f0; border-radius:10px; background:#fff; }
+.scorepill-leading { background:#f1f5ff; border-color:#c7d2fe; box-shadow: inset 0 0 0 1px #c7d2fe; }
+.label { margin-right:6px; font-size:12px; color:#64748b; }
+.card-head { display:flex; justify-content:space-between; align-items:center; padding:10px 12px; border-bottom:1px solid #e2e8f0; }
+.two-col { border-top: none; }
+@media (max-width: 760px) {
+  .controls { grid-template-columns: 1fr; }
+  .two-col { grid-template-columns: 1fr !important; }
+}
