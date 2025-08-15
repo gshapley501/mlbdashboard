@@ -645,18 +645,15 @@ function StandingsPanel({ season = CURRENT_SEASON }) {
                       <td style={{ padding: 8 }}>
                         <div style={{ display: "flex", alignItems: "center", gap: 8, minWidth: 0 }}>
                           <TeamLogo id={t.id} abbr={t.abbr} />
-                          {/* UPDATED: allow wrapping on small screens */}
                           <a
                             href={TEAM_URLS[t.id] || "#"}
                             target="_blank"
                             rel="noopener noreferrer"
                             style={{
                               fontWeight: 600,
-                              flex: "1 1 auto",
-                              minWidth: 0,
-                              whiteSpace: "normal",
-                              overflowWrap: "anywhere",
-                              wordBreak: "break-word",
+                              overflow: "hidden",
+                              textOverflow: "ellipsis",
+                              whiteSpace: "nowrap",
                               color: "inherit",
                               textDecoration: "none",
                             }}
