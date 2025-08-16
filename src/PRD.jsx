@@ -624,16 +624,18 @@ function StandingsPanel({ season = CURRENT_SEASON }) {
               >
                 {/* Fixed column widths so numeric columns align vertically across cards */}
                 <colgroup>
-  <col /> {/* Team (flex) */}
-  <col style={{ width: 64 }} />
-  <col style={{ width: 64 }} />
-  <col style={{ width: 64 }} />
-</colgroup>
+                  <col /> {/* Team (flex) */}
+                  <col style={{ width: 64 }} />
+                  <col style={{ width: 64 }} />
+                  <col style={{ width: 72 }} />
+                  <col style={{ width: 64 }} />
+                </colgroup>
                 <thead>
                   <tr style={{ color: "#64748b", textAlign: "left" }}>
                     <th style={{ padding: 8 }}>Team</th>
                     <th style={numCell}>W</th>
                     <th style={numCell}>L</th>
+                    <th style={numCell}>Pct</th>
                     <th style={numCell}>GB</th>
                   </tr>
                 </thead>
@@ -673,6 +675,7 @@ function StandingsPanel({ season = CURRENT_SEASON }) {
                       </td>
                       <td style={numCell}>{t.w}</td>
                       <td style={numCell}>{t.l}</td>
+                      <td style={numCell}>{Number(t.pct).toFixed(3)}</td>
                       <td style={numCell}>{t.gb}</td>
                     </tr>
                   ))}
