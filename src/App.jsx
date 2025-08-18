@@ -78,8 +78,6 @@ const prettyTime = (
 };
 
 // ---- Shared helpers/components ----
-
-// Small, inline‑styled logo (works without Tailwind)
 function TeamLogo({ id, abbr, size = 28 }) {
   const candidates = [
     `https://www.mlbstatic.com/team-logos/${id}.svg`,
@@ -135,25 +133,19 @@ function RoleTag({ role }) {
   );
 }
 
-// Parse clinch flags from MLB StatsAPI teamRecord (shared by Standings & Playoffs)
 function parseClinchFlags(tr) {
-  // One-letter codes sometimes appear: x=postseason berth, y=division, z=best league record/homefield, w=wild card
   const ci = String(tr?.clinchIndicator || "").toLowerCase();
-
   const divisionClinched =
     !!(tr?.divisionChamp || tr?.clinchedDivision) || ci === "y" || ci === "z";
-
   const playoffClinched =
     !!(tr?.clinched || tr?.clinchedPostseason || tr?.clinchedWildCard) ||
     ci === "x" ||
     ci === "y" ||
     ci === "z" ||
     ci === "w";
-
   return { divisionClinched, playoffClinched, clinchIndicator: ci };
 }
 
-// Tiny legend for badges
 function BadgesLegend() {
   const chip = {
     display: "inline-flex",
@@ -190,7 +182,7 @@ function BadgesLegend() {
 }
 
 // Team row with score pill aligned to the right
-function TeamRowWithScore({ team, role, leading }) {
+function TeamRowWithScore({ team, role, leading, gameId }) {
   return (
     <div className="teamline">
       <div className="teamline-left">
@@ -287,7 +279,6 @@ function simplifyGame(game) {
     away: {
       id: awayTeam?.id,
       name: awayTeam?.name,
-      // Avoid mixing ?? and || without parentheses
       abbr: (awayTeam?.abbreviation ?? (awayTeam?.teamName ?? "Away")),
       record: away?.leagueRecord
         ? `${away.leagueRecord.wins}-${away.leagueRecord.losses}`
@@ -314,6 +305,7 @@ function simplifyGame(game) {
 function ScoresPanel({ date, setDate, tz }) {
   const [games, setGames] = useState([]);
   const [loading, setLoading] = useState(false);
+  const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState("");
   const [filter, setFilter] = useState("all");
   const abortRef = useRef(null);
@@ -327,27 +319,52 @@ function ScoresPanel({ date, setDate, tz }) {
     return () => window.removeEventListener("keydown", onKey);
   }, [setDate]);
 
-  async function fetchScores(forDate) {
+  function mergeById(prev, next) {
+    const prevMap = new Map(prev.map((g) => [g.id, g]));
+    return next.map((n) => {
+      const p = prevMap.get(n.id);
+      return p ? { ...p, ...n } : n;
+    });
+  }
+
+  async function fetchScores(forDate, { background = false } = {}) {
     if (abortRef.current) abortRef.current.abort();
     const controller = new AbortController();
     abortRef.current = controller;
-    setLoading(true);
-    setError("");
+    if (!background) { setLoading(true); setError(""); } else { setRefreshing(true); }
     try {
       const url = `${MLB_API}/schedule?sportId=1&date=${forDate}&language=en&hydrate=linescore,team,flags`;
       const res = await fetch(url, { signal: controller.signal });
       if (!res.ok) throw new Error(`Network ${res.status}`);
       const data = await res.json();
       const g = (data?.dates?.[0]?.games || []).map(simplifyGame);
-      setGames(g);
+      setGames(prev => background ? mergeById(prev, g) : g);
     } catch (e) {
-      if (e.name !== "AbortError") setError(e.message || "Failed to load scores");
+      if (e.name !== "AbortError" && !background) setError(e.message || "Failed to load scores");
     } finally {
-      setLoading(false);
+      if (!background) setLoading(false);
+      setRefreshing(false);
     }
   }
+
   useEffect(() => {
     fetchScores(date);
+  }, [date]);
+
+  // Auto-refresh every ~45s when visible (no-flash)
+  useEffect(() => {
+    const id = setInterval(() => {
+      if (document.visibilityState === "visible") {
+        fetchScores(date, { background: true });
+      }
+    }, 45000);
+    const onVis = () => {
+      if (document.visibilityState === "visible") {
+        fetchScores(date, { background: true });
+      }
+    };
+    document.addEventListener("visibilitychange", onVis);
+    return () => { clearInterval(id); document.removeEventListener("visibilitychange", onVis); };
   }, [date]);
 
   const filtered = useMemo(() => {
@@ -393,6 +410,9 @@ function ScoresPanel({ date, setDate, tz }) {
         <div style={{ fontSize: 12, color: "#64748b" }}>
           Times in your local zone: {tz}
         </div>
+        {refreshing && (
+          <span className="pill pill-mini" style={{ marginLeft: 8 }}>Updating…</span>
+        )}
       </div>
 
       {loading && <div style={{ color: "#475569" }}>Loading scores…</div>}
@@ -425,15 +445,9 @@ function ScoresPanel({ date, setDate, tz }) {
             const homeScore = typeof g.home.score === "number" ? g.home.score : null;
             const awayScore = typeof g.away.score === "number" ? g.away.score : null;
             const homeLeading =
-              showLead &&
-              homeScore !== null &&
-              awayScore !== null &&
-              homeScore > awayScore;
+              showLead && homeScore !== null && awayScore !== null && homeScore > awayScore;
             const awayLeading =
-              showLead &&
-              homeScore !== null &&
-              awayScore !== null &&
-              awayScore > homeScore;
+              showLead && homeScore !== null && awayScore !== null && awayScore > homeScore;
 
             return (
               <div
@@ -446,8 +460,8 @@ function ScoresPanel({ date, setDate, tz }) {
                 }}
               >
                 <div className="left-stack" style={{ padding: 12, display: "grid", gap: 10 }}>
-                  <TeamRowWithScore team={g.home} role="home" leading={homeLeading} />
-                  <TeamRowWithScore team={g.away} role="away" leading={awayLeading} />
+                  <TeamRowWithScore team={g.home} role="home" leading={homeLeading} gameId={g.id} />
+                  <TeamRowWithScore team={g.away} role="away" leading={awayLeading} gameId={g.id} />
                 </div>
                 <div
                   className="right-info"
@@ -499,8 +513,6 @@ function ScoresPanel({ date, setDate, tz }) {
 }
 
 // ---- Standings helpers ----
-
-// Known MLB division IDs → short names for reliability (StatsAPI stable IDs)
 const DIVISION_SHORT_BY_ID = {
   200: "AL West",
   201: "AL East",
@@ -509,31 +521,26 @@ const DIVISION_SHORT_BY_ID = {
   204: "NL East",
   205: "NL Central",
 };
-
-// Fallback: convert full league strings to short form
 function shortenLeagueString(s) {
   if (!s) return "";
   return s.replace(/^American League/i, "AL").replace(/^National League/i, "NL").replace(/\s+/g, " ").trim();
 }
-
 function getDivisionShortName(rec) {
   const div = rec?.division || {};
   const id = div?.id;
   if (id && DIVISION_SHORT_BY_ID[id]) return DIVISION_SHORT_BY_ID[id];
-  // If ID is missing, try the division name (e.g., "American League East")
   const fromName = shortenLeagueString(div?.name);
   if (fromName) return fromName;
-  // Last resort: league (e.g., "American League")
   const fromLeague = shortenLeagueString(rec?.league?.name);
   return fromLeague || "Division";
 }
 
 function StandingsPanel({ season = CURRENT_SEASON }) {
   const [loading, setLoading] = useState(false);
+  const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState("");
   const [divisions, setDivisions] = useState([]);
 
-  // Shared numeric cell style for perfect digit alignment
   const numCell = {
     padding: 8,
     textAlign: "right",
@@ -544,9 +551,8 @@ function StandingsPanel({ season = CURRENT_SEASON }) {
 
   useEffect(() => {
     let live = true;
-    (async () => {
-      setLoading(true);
-      setError("");
+    async function fetchStandings({ background = false } = {}) {
+      if (!background) { setLoading(true); setError(""); } else { setRefreshing(true); }
       try {
         const res = await fetch(
           `${MLB_API}/standings?leagueId=103,104&season=${season}&standingsTypes=regularSeason`
@@ -575,13 +581,31 @@ function StandingsPanel({ season = CURRENT_SEASON }) {
         }));
         if (live) setDivisions(recs);
       } catch (e) {
-        if (live) setError(e.message || "Failed to load standings");
+        if (live && !background) setError(e.message || "Failed to load standings");
       } finally {
-        if (live) setLoading(false);
+        if (!background) setLoading(false);
+        setRefreshing(false);
       }
-    })();
+    }
+    fetchStandings();
+
+    // Light polling every 5 minutes when visible
+    const id = setInterval(() => {
+      if (document.visibilityState === "visible") {
+        fetchStandings({ background: true });
+      }
+    }, 5 * 60 * 1000);
+    const onVis = () => {
+      if (document.visibilityState === "visible") {
+        fetchStandings({ background: true });
+      }
+    };
+    document.addEventListener("visibilitychange", onVis);
+
     return () => {
       live = false;
+      clearInterval(id);
+      document.removeEventListener("visibilitychange", onVis);
     };
   }, [season]);
 
@@ -612,6 +636,9 @@ function StandingsPanel({ season = CURRENT_SEASON }) {
               style={{ background: "#f8fafc", display: "flex", alignItems: "center" }}
             >
               <span style={{ fontWeight: 700 }}>{d.name}</span>
+              {refreshing && (
+                <span className="pill pill-mini" style={{ marginLeft: 8 }}>Updating…</span>
+              )}
             </div>
             <div style={{ overflowX: "auto" }}>
               <table
@@ -622,13 +649,12 @@ function StandingsPanel({ season = CURRENT_SEASON }) {
                   tableLayout: "fixed",
                 }}
               >
-                {/* Fixed column widths so numeric columns align vertically across cards */}
                 <colgroup>
-  <col /> {/* Team (flex) */}
-  <col style={{ width: 64 }} />
-  <col style={{ width: 64 }} />
-  <col style={{ width: 64 }} />
-</colgroup>
+                  <col /> {/* Team (flex) */}
+                  <col style={{ width: 64 }} />
+                  <col style={{ width: 64 }} />
+                  <col style={{ width: 64 }} />
+                </colgroup>
                 <thead>
                   <tr style={{ color: "#64748b", textAlign: "left" }}>
                     <th style={{ padding: 8 }}>Team</th>
@@ -643,7 +669,6 @@ function StandingsPanel({ season = CURRENT_SEASON }) {
                       <td style={{ padding: 8 }}>
                         <div style={{ display: "flex", alignItems: "center", gap: 8, minWidth: 0 }}>
                           <TeamLogo id={t.id} abbr={t.abbr} />
-                          {/* UPDATED: wrap at spaces only (match Playoffs) */}
                           <a
                             href={TEAM_URLS[t.id] || "#"}
                             target="_blank"
@@ -694,106 +719,122 @@ function leagueShort(idOrName) {
 // ---- Playoffs (Division leaders + Wild Cards) ----
 function PlayoffsPanel({ season = CURRENT_SEASON }) {
   const [loading, setLoading] = useState(false);
+  const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState("");
   const [groups, setGroups] = useState([]);
 
-  // Games Back vs cutoff helper
   function gbVsCutoff(team, cutoff) {
     if (!team || !cutoff) return null;
-    // Positive if team is behind cutoff; negative if ahead (we clamp later)
     const diff = (cutoff.w - team.w + (team.l - cutoff.l)) / 2;
     return Math.max(0, Number(diff));
   }
 
   useEffect(() => {
     let live = true;
-    (async () => {
-      setLoading(true);
-      setError("");
+
+    async function computeGroups(json) {
+      const byLg = {};
+      (json?.records || []).forEach((rec) => {
+        const lg = leagueShort(rec?.league?.id || rec?.league?.name) || "League";
+        const trs = (rec?.teamRecords || []).map((tr) => {
+          const { divisionClinched, playoffClinched } = parseClinchFlags(tr);
+          return {
+            id: tr?.team?.id,
+            name: tr?.team?.name,
+            abbr:
+              tr?.team?.abbreviation ||
+              tr?.team?.teamCode?.toUpperCase?.() ||
+              "",
+            w: tr?.wins,
+            l: tr?.losses,
+            pct: Number(tr?.winningPercentage),
+            divisionRank: Number(tr?.divisionRank),
+            divisionClinched,
+            playoffClinched,
+          };
+        });
+        if (!byLg[lg]) byLg[lg] = [];
+        byLg[lg].push(...trs);
+      });
+
+      const seededGroups = Object.keys(byLg)
+        .sort()
+        .map((lg) => {
+          const teams = byLg[lg];
+          const leaders = teams
+            .filter((t) => t.divisionRank === 1)
+            .sort((a, b) => b.pct - a.pct)
+            .map((t, i) => ({
+              ...t,
+              seed: i + 1,
+              isDivisionLeader: true,
+              divisionClinched: !!t.divisionClinched,
+            }));
+
+          const others = teams
+            .filter((t) => t.divisionRank !== 1)
+            .sort((a, b) => b.pct - a.pct);
+
+          const wcSeeded = others.map((t, i) => {
+            const seed = i + 4;
+            const inField = seed <= 6;
+            return {
+              ...t,
+              seed,
+              isDivisionLeader: false,
+              wildCardClinched: inField && !!t.playoffClinched && !t.divisionClinched,
+            };
+          });
+
+          const seeded = [...leaders, ...wcSeeded];
+          const cutoff = seeded.find((x) => x.seed === 6);
+          const withGb = seeded.map((t) => ({
+            ...t,
+            gbPlayoffs: t.seed <= 6 ? 0 : gbVsCutoff(t, cutoff),
+          }));
+          return { league: lg, teams: withGb };
+        });
+
+      return seededGroups;
+    }
+
+    async function fetchPlayoffs({ background = false } = {}) {
+      if (!background) { setLoading(true); setError(""); } else { setRefreshing(true); }
       try {
-        // Pull regular season standings and compute seeds per league
         const res = await fetch(
           `${MLB_API}/standings?leagueId=103,104&season=${season}&standingsTypes=regularSeason`
         );
         if (!res.ok) throw new Error(`Network ${res.status}`);
         const json = await res.json();
-        const byLg = {};
-        (json?.records || []).forEach((rec) => {
-          const lg = leagueShort(rec?.league?.id || rec?.league?.name) || "League";
-          const trs = (rec?.teamRecords || []).map((tr) => {
-            const { divisionClinched, playoffClinched } = parseClinchFlags(tr);
-            return {
-              id: tr?.team?.id,
-              name: tr?.team?.name,
-              abbr:
-                tr?.team?.abbreviation ||
-                tr?.team?.teamCode?.toUpperCase?.() ||
-                "",
-              w: tr?.wins,
-              l: tr?.losses,
-              pct: Number(tr?.winningPercentage),
-              divisionRank: Number(tr?.divisionRank),
-              divisionClinched,
-              playoffClinched,
-            };
-          });
-          if (!byLg[lg]) byLg[lg] = [];
-          byLg[lg].push(...trs);
-        });
-
-        // Build seeded lists: 1-3 = division leaders by pct; 4-6 = top non-leaders by pct
-        const seededGroups = Object.keys(byLg)
-          .sort()
-          .map((lg) => {
-            const teams = byLg[lg];
-            const leaders = teams
-              .filter((t) => t.divisionRank === 1)
-              .sort((a, b) => b.pct - a.pct)
-              .map((t, i) => ({
-                ...t,
-                seed: i + 1,
-                isDivisionLeader: true,
-                divisionClinched: !!t.divisionClinched,
-              }));
-
-            const others = teams
-              .filter((t) => t.divisionRank !== 1)
-              .sort((a, b) => b.pct - a.pct);
-
-            const wcSeeded = others.map((t, i) => {
-              const seed = i + 4;
-              const inField = seed <= 6;
-              return {
-                ...t,
-                seed,
-                isDivisionLeader: false,
-                wildCardClinched: inField && !!t.playoffClinched && !t.divisionClinched,
-              };
-            });
-
-            const seeded = [...leaders, ...wcSeeded];
-
-            // Identify wild card cutoff (seed 6) for GB computation
-            const cutoff = seeded.find((x) => x.seed === 6);
-
-            // Annotate GB vs playoff cutoff for every team (0 for seeds 1–6)
-            const withGb = seeded.map((t) => ({
-              ...t,
-              gbPlayoffs: t.seed <= 6 ? 0 : gbVsCutoff(t, cutoff),
-            }));
-
-            return { league: lg, teams: withGb };
-          });
-
-        if (live) setGroups(seededGroups);
+        const newGroups = await computeGroups(json);
+        if (live) setGroups(newGroups);
       } catch (e) {
-        if (live) setError(e.message || "Failed to load playoffs view");
+        if (live && !background) setError(e.message || "Failed to load playoffs view");
       } finally {
-        if (live) setLoading(false);
+        if (!background) setLoading(false);
+        setRefreshing(false);
       }
-    })();
+    }
+
+    fetchPlayoffs();
+
+    // Light polling every 5 minutes when visible
+    const id = setInterval(() => {
+      if (document.visibilityState === "visible") {
+        fetchPlayoffs({ background: true });
+      }
+    }, 5 * 60 * 1000);
+    const onVis = () => {
+      if (document.visibilityState === "visible") {
+        fetchPlayoffs({ background: true });
+      }
+    };
+    document.addEventListener("visibilitychange", onVis);
+
     return () => {
       live = false;
+      clearInterval(id);
+      document.removeEventListener("visibilitychange", onVis);
     };
   }, [season]);
 
@@ -832,6 +873,9 @@ function PlayoffsPanel({ season = CURRENT_SEASON }) {
               <span style={{ fontSize: 12, color: "#64748b" }}>
                 Red line = in above (seeds 1–6), out below
               </span>
+              {refreshing && (
+                <span className="pill pill-mini" style={{ marginLeft: 8 }}>Updating…</span>
+              )}
             </div>
             <div style={{ overflowX: "auto" }}>
               <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 14 }}>
@@ -865,7 +909,6 @@ function PlayoffsPanel({ season = CURRENT_SEASON }) {
                             >
                               {t.name}
                             </a>
-                            {/* Show badges only when mathematically clinched */}
                             {t.divisionClinched && (
                               <span className="pill pill-mini" style={{ marginLeft: 8 }}>
                                 DIV 🏆
